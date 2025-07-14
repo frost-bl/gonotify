@@ -114,23 +114,21 @@ func NewDirWatcher(ctx context.Context, fileMask uint32, root string) (*DirWatch
 							return nil
 						}
 
-						if !f.IsDir() {
-							// fake event, but there can be duplicates of this event provided by real watcher
-							select {
-							case <-ctx.Done():
-								return nil
-							case events <- FileEvent{
+						if f.IsDir() {
+							// Add watch for subdirectories
+							i.AddWatch(path, IN_ALL_EVENTS)
+						} else {
+							// fake event for existing files
+							events <- FileEvent{
 								InotifyEvent: InotifyEvent{
 									Name: path,
 									Mask: IN_CREATE,
 								},
-							}: //noop
 							}
 						}
 
 						return nil
 					})
-
 					// Wait for further files to be added
 					i.AddWatch(event.Name, IN_ALL_EVENTS)
 

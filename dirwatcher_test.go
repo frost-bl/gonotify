@@ -180,4 +180,57 @@ func TestDirWatcher(t *testing.T) {
 			t.Error("DirWatcher did not close")
 		}
 	})
+
+	t.Run("FileInNestedSubdir", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		defer cancel()
+
+		dw, err := NewDirWatcher(ctx, IN_CREATE, dir)
+		if err != nil {
+			t.Error(err)
+		}
+
+		// eat events from previous test
+		e := <-dw.C
+		e = <-dw.C
+
+		// Create a nested directory structure all at once
+		nestedPath := filepath.Join(dir, "parent", "child", "grandchild")
+		err = os.MkdirAll(nestedPath, os.ModePerm)
+		if err != nil {
+			t.Error(err)
+		}
+
+		// Create a file in the deeply nested directory
+		f1Path := filepath.Join(nestedPath, "file1.txt")
+		f, err := os.OpenFile(f1Path, os.O_CREATE, os.ModePerm)
+		if err != nil {
+			t.Error(err)
+		}
+		f.Close()
+
+		e = <-dw.C
+		if e.Eof {
+			t.Fatal("Got EOF instead of file event")
+		}
+		if e.Name != f1Path {
+			t.Fatalf("Expected event for %s, got %s", f1Path, e.Name)
+		}
+
+		// Now create another file in the nested directory to ensure the watch is active
+		f2Path := filepath.Join(nestedPath, "file2.txt")
+		f2, err := os.OpenFile(f2Path, os.O_CREATE, os.ModePerm)
+		if err != nil {
+			t.Error(err)
+		}
+		f2.Close()
+
+		e2 := <-dw.C
+		if e2.Eof {
+			t.Fatal("Got EOF instead of second file event - subdirectory not being watched!")
+		}
+		if e2.Name != f2Path {
+			t.Fatalf("Expected event for %s, got %s", f2Path, e2.Name)
+		}
+	})
 }
